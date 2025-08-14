@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>出退勤トラッカー（試作）</title>
+  <style>
+    :root {
+      --bg: #f7f7fb;
+      --card: #ffffff;
+      --ink: #1f2937;
+      --ink-dim: #4b5563;
+      --brand: #3b82f6;
+      --brand-ink: #0b4fb3;
+      --ok: #10b981;
+      --warn: #f59e0b;
+      --bad: #ef4444;
+      --muted: #e5e7eb;
+      --shadow: 0 10px 30px rgba(17,24,39,0.08);
+      --radius: 16px;
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
+    body {
+      margin: 0;
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji", "Segoe UI Emoji";
+      background: linear-gradient(135deg, #f2f6ff, #fefefe);
+      color: var(--ink);
+    }
+    .container {
+      max-width: 1100px;
+      margin: 24px auto 64px;
+      padding: 0 16px;
+    }
+    header {
+      display: flex; gap: 16px; align-items: center; justify-content: space-between;
+      margin-bottom: 16px;
+    }
+    .title {
+      font-size: clamp(20px, 2.2vw, 28px);
+      font-weight: 800;
+      letter-spacing: .2px;
+      display: flex; align-items: center; gap: 10px;
+    }
+    .clock { font-variant-numeric: tabular-nums; color: var(--ink-dim); }
+    .grid {
+      display: grid; gap: 18px;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    }
+    .card {
+      background: var(--card);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 18px;
+      border: 1px solid var(--muted);
+    }
+    .row { display: flex; gap: 10px; align-items: center; }
+    .row.wrap { flex-wrap: wrap; }
+    .grow { flex: 1; }
+    label { font-size: 12px; color: var(--ink-dim); display: block; margin-bottom: 6px; }
+    input, select, button, textarea {
+      font: inherit;
+      border-radius: 12px;
+      border: 1px solid var(--muted);
+      padding: 10px 12px;
+      background: #fff;
+      color: var(--ink);
+    }
+    input:focus, select:focus, textarea:focus { outline: 2px solid #c7ddff; border-color: #a3c7ff; }
+    button {
+      border: none; cursor: pointer; font-weight: 700; letter-spacing: .2px;
+      transition: transform .03s ease-in-out, box-shadow .2s;
+    }
+    button:active { transform: translateY(1px); }
+    .btn { background: var(--brand); color: #fff; }
+    .btn:hover { box-shadow: var(--shadow); }
+    .btn-ghost { background: #fff; color: var(--ink); border: 1px solid var(--muted); }
+    .btn-ok { background: var(--ok); color:#fff; }
+    .btn-warn { background: var(--warn); color:#fff; }
+    .btn-bad { background: var(--bad); color:#fff; }
+    .tag { padding: 4px 8px; font-size: 12px; border-radius: 999px; border:1px solid var(--muted); background:#fff; }
+    .kpi { font-weight: 800; font-size: 20px; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { border-bottom: 1px solid var(--muted); padding: 10px 8px; text-align: left; font-size: 14px; }
+    th { font-size: 12px; color: var(--ink-dim); text-transform: uppercase; letter-spacing: .6px; }
+    .hint { font-size: 12px; color: var(--ink-dim); }
+    .pillbar {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 8px;
+    }
+    .pillbar button { padding: 12px 8px; }
+    footer { margin-top: 16px; text-align: center; color: var(--ink-dim); font-size: 12px; }
+    .danger { color: var(--bad); }
+    .success { color: var(--ok); }
+    .warn { color: var(--warn); }
+    .mono { font-variant-numeric: tabular-nums; }
+    .sr-only { position: absolute; left: -10000px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div class="title">出退勤トラッカー <span class="tag">試作</span></div>
+      <div class="clock" id="clock">--:--:--</div>
+    </header>
+
+    <div class="grid">
+      <!-- 左：操作カード -->
+      <section class="card" aria-labelledby="ops-title">
+        <h2 id="ops-title" style="margin:0 0 10px 0; font-size:18px;">打刻</h2>
+        <div class="row wrap" style="gap:12px; margin-bottom:12px;">
+          <div class="grow">
+            <label for="user">ユーザー</label>
+            <input id="user" placeholder="氏名（例：山本力也）" />
+          </div>
+          <div>
+            <label for="team">チーム/拠点</label>
+            <input id="team" placeholder="任意" />
+          </div>
+          <div>
+            <label for="shiftStart">定時（開始）</label>
+            <input type="time" id="shiftStart" value="09:00" />
+          </div>
+          <div>
+            <label for="shiftEnd">定時（終了）</label>
+            <input type="time" id="shiftEnd" value="18:00" />
+          </div>
+        </div>
+
+        <div class="pillbar" style="margin-bottom:10px;">
+          <button class="btn-ok" data-action="wake">起床</button>
+          <button class="btn-warn" data-action="depart">出発</button>
+          <button class="btn btn" data-action="clockin">出勤</button>
+          <button class="btn-bad" data-action="clockout">退勤</button>
+        </div>
+        <div class="row wrap" style="gap:8px; margin-bottom:8px;">
+          <input id="note" class="grow" placeholder="メモ（遅延理由など）" />
+          <button class="btn-ghost" id="quickLate">5分遅れ</button>
+          <button class="btn-ghost" id="quickWorkFromHome">在宅</button>
+        </div>
+        <div class="hint">同一ユーザー名で今日のレコードに追記されます。誤打刻は一覧の 🗑️ で削除可。</div>
+      </section>
+
+      <!-- 右：サマリーカード -->
+      <section class="card" aria-labelledby="summary-title">
+        <h2 id="summary-title" style="margin:0 0 10px 0; font-size:18px;">今日のサマリー</h2>
+        <div class="row wrap" style="gap:12px;">
+          <div class="card" style="flex:1; border:1px dashed var(--muted);">
+            <div class="hint">打刻人数</div>
+            <div class="kpi mono" id="kpiPeople">0</div>
+          </div>
+          <div class="card" style="flex:1; border:1px dashed var(--muted);">
+            <div class="hint">遅刻（出勤が定時を超過）</div>
+            <div class="kpi mono danger" id="kpiLate">0</div>
+          </div>
+          <div class="card" style="flex:1; border:1px dashed var(--muted);">
+            <div class="hint">未出勤（起床/出発のみ）</div>
+            <div class="kpi mono warn" id="kpiNoClockIn">0</div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <!-- ログテーブル -->
+    <section class="card" style="margin-top:18px;" aria-labelledby="log-title">
+      <h2 id="log-title" style="margin:0 0 10px 0; font-size:18px;">ログ（本日）</h2>
+      <div class="row wrap" style="gap:8px; margin-bottom:8px;">
+        <input id="search" class="grow" placeholder="検索：氏名/メモ/チーム" />
+        <button id="exportCsv" class="btn">CSVエクスポート</button>
+        <button id="exportJson" class="btn-ghost">JSON保存</button>
+        <label for="importFile" class="btn-ghost" style="cursor:pointer;">JSON読み込み</label>
+        <input id="importFile" type="file" accept="application/json" class="sr-only" />
+        <button id="clearToday" class="btn-bad">今日を全消し</button>
+      </div>
+      <div class="hint" id="alertZone">定時超過の人が出るとここに⚠️を表示します。</div>
+      <div style="overflow:auto;">
+        <table id="table">
+          <thead>
+            <tr>
+              <th>氏名</th>
+              <th>チーム</th>
+              <th>起床</th>
+              <th>出発</th>
+              <th>出勤</th>
+              <th>退勤</th>
+              <th>メモ</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody id="tbody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <footer>
+      <span>ローカル保存版（LocalStorage）。小規模運用の試作。要件が固まればクラウド化できます。</span>
+    </footer>
+  </div>
+
+  <script>
+    // ===== ヘルパー =====
+    const $ = (s) => document.querySelector(s);
+    const pad = (n) => String(n).padStart(2, '0');
+    const todayKey = () => {
+      const d = new Date();
+      return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+    }
+    const nowIso = () => new Date().toISOString();
+    const fmtTime = (iso) => iso ? new Date(iso).toLocaleTimeString('ja-JP', { hour:'2-digit', minute:'2-digit', second:'2-digit' }) : '';
+
+    // ===== データ層（LocalStorage） =====
+    const KEY = 'attendance.v1';
+    function loadAll() {
+      try { return JSON.parse(localStorage.getItem(KEY)) || {}; } catch { return {}; }
+    }
+    function saveAll(obj) { localStorage.setItem(KEY, JSON.stringify(obj)); }
+
+    function getDay(day = todayKey()) {
+      const all = loadAll();
+      return all[day] || [];
+    }
+    function setDay(records, day = todayKey()) {
+      const all = loadAll();
+      all[day] = records;
+      saveAll(all);
+    }
+
+    // ===== UIロジック =====
+    function tickClock(){
+      const d = new Date();
+      $('#clock').textContent = `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+    }
+    setInterval(tickClock, 1000); tickClock();
+
+    function upsert(action){
+      const name = $('#user').value.trim();
+      if(!name){ alert('氏名を入力してください'); return; }
+      const team = $('#team').value.trim();
+      const start = $('#shiftStart').value || '09:00';
+      const end = $('#shiftEnd').value || '18:00';
+      const note = $('#note').value.trim();
+
+      const list = getDay();
+      let rec = list.find(r => r.name === name);
+      if(!rec){
+        rec = { name, team, shiftStart:start, shiftEnd:end, note:'', wake:null, depart:null, in:null, out:null };
+        list.push(rec);
+      }
+      rec.team = team; // 常に最新反映
+      rec.shiftStart = start; rec.shiftEnd = end;
+      if(note) rec.note = (rec.note ? rec.note + ' / ' : '') + note;
+
+      const t = nowIso();
+      if(action==='wake') rec.wake = rec.wake || t;
+      if(action==='depart') rec.depart = rec.depart || t;
+      if(action==='clockin') rec.in = rec.in || t;
+      if(action==='clockout') rec.out = rec.out || t;
+
+      setDay(list); render();
+      $('#note').value = '';
+    }
+
+    function delRecord(name){
+      const list = getDay().filter(r => r.name !== name);
+      setDay(list); render();
+    }
+
+    function render(){
+      const q = $('#search').value.trim().toLowerCase();
+      const list = getDay();
+      const tbody = $('#tbody');
+      tbody.innerHTML = '';
+
+      let late=0, inOnly=0, count=0;
+      const [sh, sm] = ($('#shiftStart').value || '09:00').split(':').map(Number);
+      const shiftStartToday = new Date(); shiftStartToday.setHours(sh, sm, 0, 0);
+
+      list
+        .filter(r => !q || JSON.stringify(r).toLowerCase().includes(q))
+        .sort((a,b)=> (a.team||'').localeCompare(b.team||'') || a.name.localeCompare(b.name))
+        .forEach(r => {
+          count++;
+          const tr = document.createElement('tr');
+          const isLate = r.in && new Date(r.in) > shiftStartToday;
+          const noClockIn = !r.in && (r.wake || r.depart);
+          if(isLate) late++;
+          if(noClockIn) inOnly++;
+
+          tr.innerHTML = `
+            <td>${r.name}</td>
+            <td>${r.team||''}</td>
+            <td class="mono">${fmtTime(r.wake)}</td>
+            <td class="mono">${fmtTime(r.depart)}</td>
+            <td class="mono ${isLate?'danger':''}">${fmtTime(r.in)}</td>
+            <td class="mono">${fmtTime(r.out)}</td>
+            <td>${r.note||''}</td>
+            <td><button class="btn-ghost" data-del="${r.name}">🗑️</button></td>
+          `;
+          tbody.appendChild(tr);
+        });
+
+      $('#kpiPeople').textContent = String(count);
+      $('#kpiLate').textContent = String(late);
+      $('#kpiNoClockIn').textContent = String(inOnly);
+
+      const alert = [];
+      if(late>0) alert.push(`⚠️ 遅刻 ${late} 名`);
+      if(inOnly>0) alert.push(`⏳ 未出勤 ${inOnly} 名`);
+      $('#alertZone').textContent = alert.join(' / ') || '定時超過の人が出るとここに⚠️を表示します。';
+    }
+
+    function exportCsv(){
+      const list = getDay();
+      const headers = ['date','name','team','wake','depart','in','out','shiftStart','shiftEnd','note'];
+      const rows = list.map(r => [todayKey(), r.name, r.team||'', r.wake||'', r.depart||'', r.in||'', r.out||'', r.shiftStart||'', r.shiftEnd||'', (r.note||'').replace(/\n/g, ' ')]);
+      const csv = [headers.join(','), ...rows.map(a=>a.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(','))].join('\n');
+      const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `attendance_${todayKey()}.csv`;
+      a.click();
+    }
+
+    function exportJson(){
+      const data = loadAll();
+      const blob = new Blob([JSON.stringify(data, null, 2)], {type:'application/json'});
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'attendance_backup.json';
+      a.click();
+    }
+
+    function importJson(file){
+      const reader = new FileReader();
+      reader.onload = () => {
+        try{
+          const obj = JSON.parse(reader.result);
+          if(typeof obj !== 'object') throw new Error('不正な形式');
+          localStorage.setItem(KEY, JSON.stringify(obj));
+          render();
+          alert('読み込みました');
+        }catch(e){ alert('JSONの形式が不正です'); }
+      };
+      reader.readAsText(file);
+    }
+
+    // ===== イベント =====
+    document.addEventListener('click', (e)=>{
+      if(e.target.matches('[data-action]')){
+        upsert(e.target.getAttribute('data-action'));
+      }
+      if(e.target.matches('[data-del]')){
+        const name = e.target.getAttribute('data-del');
+        if(confirm(`${name} を本日のログから削除しますか？`)) delRecord(name);
+      }
+    });
+    $('#search').addEventListener('input', render);
+    $('#exportCsv').addEventListener('click', exportCsv);
+    $('#exportJson').addEventListener('click', exportJson);
+    $('#importFile').addEventListener('change', (e)=> e.target.files[0] && importJson(e.target.files[0]));
+    $('#clearToday').addEventListener('click', ()=>{
+      if(confirm('本日のレコードを全て削除します。よろしいですか？')) setDay([]), render();
+    });
+    $('#quickLate').addEventListener('click', ()=> $('#note').value = ($('#note').value? $('#note').value+' / ' : '') + '5分遅れ');
+    $('#quickWorkFromHome').addEventListener('click', ()=> $('#note').value = ($('#note').value? $('#note').value+' / ' : '') + '在宅');
+
+    // 初期描画
+    render();
+  </script>
+</body>
+</html>
